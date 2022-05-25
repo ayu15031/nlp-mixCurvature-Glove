@@ -4,7 +4,211 @@ import torch.nn as nn
 import torch.nn.init as init
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
+import tqdm
+import geoopt
 
+class Euclidean():
+    def __init__():
+        pass
+
+    def distance(a, b):
+        return torch.abs(b-a)
+
+class ManifoldEmbedding(nn.Module):
+    def __init__(self, embedding_size, vocab_size, c):
+        super(ManifoldEmbedding, self).__init__()
+
+        self._focal_embeddings = nn.Embedding(
+            vocab_size, embedding_size, max_norm=1
+        ).type(torch.float64)
+
+        self._context_embeddings = nn.Embedding(
+            vocab_size, embedding_size, max_norm=1
+        ).type(torch.float64)
+
+        self._focal_biases = nn.Embedding(
+            vocab_size, 1, max_norm=1
+        ).type(torch.float64)
+
+        self._context_biases = nn.Embedding(
+            vocab_size, 1, max_norm=1
+        ).type(torch.float64)
+
+        # if not c:
+        #     self.manifold = Euclidean()  
+        # else:  
+        #     self.manifold = geoopt.manifolds.Stereographic(k=c, learnable=True)
+        
+        self.manifold = geoopt.manifolds.Stereographic(k=c, learnable=(c!=0))
+
+
+    def forward(self, focal_input, context_input, log_coocurrence_count):
+        focal_embed = self._focal_embeddings(focal_input)
+        context_embed = self._context_embeddings(context_input)
+        focal_bias = self._focal_biases(focal_input)
+        context_bias = self._context_biases(context_input)     
+        d = self.manifold.dist(focal_embed, context_embed)
+        d = d**2/2 #Applying h function
+        # print(d.shape)
+        # d = d/torch.norm(d)
+        # print(f"d: {d}")
+        loss = -d + focal_bias + context_bias - log_coocurrence_count
+        return loss**2
+
+
+
+class GloVeMixedCurvature(nn.Module):
+    """Implement GloVe model in Mixed-Curvature space with Pytorch
+    """
+
+    def __init__(self, embedding_size, context_size, vocab_size, min_occurrance=1, x_max=100, alpha=3 / 4):
+        super(GloVeMixedCurvature, self).__init__()
+
+        self.embedding_size = embedding_size
+        if isinstance(context_size, tuple):
+            self.left_context, self.right_context = context_size
+        if isinstance(context_size, int):
+            self.left_context = self.right_context = context_size
+        else:
+            raise ValueError(
+                "'context_size' should be an int or a tuple of two ints")
+        self.vocab_size = vocab_size
+        self.alpha = alpha
+        self.min_occurrance = min_occurrance
+        self.x_max = x_max
+
+        self.euc = ManifoldEmbedding(embedding_size, vocab_size, 0)
+        self.hyp = ManifoldEmbedding(embedding_size, vocab_size, -0.5)
+        self.sph = ManifoldEmbedding(embedding_size, vocab_size, 0.5)
+
+        # self.w1 = nn.Parameter(torch.Tensor([0.33]))
+        # self.w2 = nn.Parameter(torch.Tensor([0.33]))
+        
+        self.w = nn.Parameter(torch.Tensor([0.33, 0.33, 0.33]))
+
+        self._glove_dataset = None
+
+        for params in self.parameters():
+            init.uniform_(params, a=-1, b=1)
+
+    def fit(self, corpus):
+        """get dictionary word list and co-occruence matrix from corpus
+
+        Args:
+            corpus (list): contain word id list
+
+        Raises:
+            ValueError: when count zero cocurrences will raise the problems
+        """
+
+        left_size, right_size = self.left_context, self.right_context
+        vocab_size, min_occurrance = self.vocab_size, self.min_occurrance
+
+        # get co-occurence count matrix
+        word_counts = Counter()
+        cooccurence_counts = defaultdict(float)
+        for region in corpus:
+            word_counts.update(region)
+            for left_context, word, right_context in _context_windows(region, left_size, right_size):
+                for i, context_word in enumerate(left_context[::-1]):
+                    # add (1 / distance from focal word) for this pair
+                    cooccurence_counts[(word, context_word)] += 1 / (i + 1)
+                for i, context_word in enumerate(right_context):
+                    cooccurence_counts[(word, context_word)] += 1 / (i + 1)
+        if len(cooccurence_counts) == 0:
+            raise ValueError(
+                "No coccurrences in corpus, Did you try to reuse a generator?")
+
+        # get words bag information
+        tokens = [word for word, count in
+                  word_counts.most_common(vocab_size) if count >= min_occurrance]
+        coocurrence_matrix = [(words[0], words[1], count)
+                              for words, count in cooccurence_counts.items()
+                              if words[0] in tokens and words[1] in tokens]
+        self._glove_dataset = GloVeDataSet(coocurrence_matrix)
+
+    def train(self, num_epoch, device, batch_size=512, learning_rate=0.05, loop_interval=10):
+        """Training GloVe model
+
+        Args:
+            num_epoch (int): number of epoch
+            device (str): cpu or gpu
+            batch_size (int, optional): Defaults to 512.
+            learning_rate (float, optional): Defaults to 0.05. learning rate for Adam optimizer
+            batch_interval (int, optional): Defaults to 100. interval time to show average loss
+
+        Raises:
+            NotFitToCorpusError: if the model is not fit by corpus, the error will be raise
+        """
+
+        if self._glove_dataset is None:
+            raise NotFitToCorpusError(
+                "Please fit model with corpus before training")
+
+        # basic training setting
+        optimizer = optim.Adam(self.parameters(), lr=learning_rate)
+        glove_dataloader = DataLoader(self._glove_dataset, batch_size)
+        total_loss = 0
+
+        for epoch in tqdm.tqdm(range(num_epoch)):
+            for idx, batch in enumerate(glove_dataloader):
+                optimizer.zero_grad()
+
+                i_s, j_s, counts = batch
+                i_s = i_s.to(device)
+                j_s = j_s.to(device)
+                counts = counts.to(device)
+                loss = self._loss(i_s, j_s, counts)
+
+                total_loss += loss.item()
+                if idx % loop_interval == 0:
+                    avg_loss = total_loss / loop_interval
+                    print("epoch: {}, current step: {}, average loss: {}".format(
+                        epoch, idx, avg_loss))
+                    total_loss = 0
+
+                loss.backward()
+                optimizer.step()
+
+        print("finish glove vector training")
+
+    def get_coocurrance_matrix(self):
+        """ Return co-occurance matrix for saving
+
+        Returns:
+            list: list itam (word_idx1, word_idx2, cooccurances)
+        """
+
+        return self._glove_dataset._coocurrence_matrix
+
+    def embedding_for_tensor(self, tokens):
+        if not torch.is_tensor(tokens):
+            raise ValueError("the tokens must be pytorch tensor object")
+
+        return self._focal_embeddings(tokens) + self._context_embeddings(tokens)
+
+    def _loss(self, focal_input, context_input, coocurrence_count):
+        x_max, alpha = self.x_max, self.alpha
+
+        # count weight factor
+        weight_factor = torch.pow(coocurrence_count / x_max, alpha)
+        weight_factor[weight_factor > 1] = 1
+
+        log_coocurrence_count = torch.log(coocurrence_count)
+
+        self.ws = torch.nn.functional.softmax(self.w)
+
+        #TODO MAKE WEIGHTS BETTER
+
+        loss = self.euc(focal_input, context_input, log_coocurrence_count)*self.ws[0] +\
+            self.hyp(focal_input, context_input, log_coocurrence_count)*self.ws[1] +\
+            self.sph(focal_input, context_input, log_coocurrence_count)*self.ws[2]
+
+
+        single_losses = weight_factor * loss
+        mean_loss = torch.mean(single_losses)
+        return mean_loss
+        
 
 class GloVeModel(nn.Module):
     """Implement GloVe model with Pytorch
@@ -28,8 +232,10 @@ class GloVeModel(nn.Module):
 
         self._focal_embeddings = nn.Embedding(
             vocab_size, embedding_size).type(torch.float64)
+
         self._context_embeddings = nn.Embedding(
             vocab_size, embedding_size).type(torch.float64)
+
         self._focal_biases = nn.Embedding(vocab_size, 1).type(torch.float64)
         self._context_biases = nn.Embedding(vocab_size, 1).type(torch.float64)
         self._glove_dataset = None

@@ -1,24 +1,16 @@
+import os.path
 import zipfile
 import logging
 import pickle
 import torch
-from glove import GloVeModel
+from glove import GloVeModel, GloVeMixedCurvature
 from tools import SpacyTokenizer, Dictionary
-
-import debugpy
-
-debugpy.listen(5678)
-print("Waiting for debugger")
-debugpy.wait_for_client()
-print("Attached! :)")
-
 
 logging.basicConfig(
     format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
-FILE_PATH = './data/text8.zip'
-MODLE_PATH = './model/glove.pt'
-DOC_PATH = './data/corpus.pickle'
+FILE_PATH = 'data/f.txt'
+# FILE_PATH = 'data/book_clean.txt'
 COMATRIX_PATH = './data/comat.pickle'
 LANG = 'en_core_web_sm'
 EMBEDDING_SIZE = 128
@@ -44,7 +36,9 @@ def read_data(file_path, type='file'):
     return text
 
 
-def preprocess(file_path):
+
+
+def preprocess(FILE_PATH, CORPUS_PICKLE=None):
     """ Get corpus and vocab_size from raw text
 
     Args:
@@ -56,23 +50,32 @@ def preprocess(file_path):
     """
 
     # preprocess read raw text
-    # text = read_data(FILE_PATH, type='zip')
-    # logging.info("read raw data")
-
-    # init base model
-    # tokenizer = SpacyTokenizer(LANG)
+    
     dictionary = Dictionary()
 
-    # build corpus
-    # doc = tokenizer.tokenize(text)
-    # logging.info("after generate tokens from text")
+    if(not os.path.isfile(CORPUS_PICKLE)):
+        print("PREPROCESSING AND CREATING DATA DICT...")
+        text = read_data(FILE_PATH, type='file')
+        logging.info("read raw data")
 
-    # save doc
-    # with open(DOC_PATH, mode='wb') as fp:
-    #     pickle.dump(doc, fp)
-    # logging.info("tokenized documents saved!")
+        # init base model
+        tokenizer = SpacyTokenizer(LANG)
+        logging.info("loaded tokenizers")
+
+        # build corpus
+        doc = tokenizer.tokenize(text)
+        logging.info("tokens generated")
+
+        # save doc
+        with open(CORPUS_PICKLE, mode='wb') as fp:
+            pickle.dump(doc, fp)
+        logging.info("tokenized documents saved!")
+
+    else:
+        print(f"FOUND THE DICT: {CORPUS_PICKLE}")
+
     # load doc
-    with open(DOC_PATH, 'rb') as fp:
+    with open(CORPUS_PICKLE, 'rb') as fp:
         doc = pickle.load(fp)
 
     dictionary.update(doc)
@@ -83,16 +86,29 @@ def preprocess(file_path):
     return corpus, vocab_size
 
 
-def train_glove_model():
+def train_glove_model(TYPE, FILE_PATH, CORPUS_PICKLE):
+    
+    if(TYPE == "mixed"):
+        MODEL_PATH = "model/gloveMixed.pt"
+    else:
+        MODEL_PATH = "model/glove.pt"
+
     # preprocess
-    corpus, vocab_size = preprocess(FILE_PATH)
+    corpus, vocab_size = preprocess(FILE_PATH, CORPUS_PICKLE)
 
     # specify device type
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
     # init vector model
     logging.info("init model hyperparameter")
-    model = GloVeModel(EMBEDDING_SIZE, CONTEXT_SIZE, vocab_size)
+
+    if TYPE=="vanilla":
+        model = GloVeModel(EMBEDDING_SIZE, CONTEXT_SIZE, vocab_size)
+    elif TYPE=="mixed":
+        model = GloVeMixedCurvature(EMBEDDING_SIZE, CONTEXT_SIZE, vocab_size)
+    else:
+        print(f"wtf is {TYPE}")
+    
     model.to(device)
 
     # fit corpus to count cooccurance matrix
@@ -104,10 +120,16 @@ def train_glove_model():
         pickle.dump(cooccurance_matrix, fp)
 
     model.train(NUM_EPOCH, device, learning_rate=LEARNING_RATE)
+    print(f"Space Weight: {model.ws}")
+
 
     # save model for evaluation
-    torch.save(model.state_dict(), MODLE_PATH)
+    torch.save(model.state_dict(), MODEL_PATH)
 
 
 if __name__ == '__main__':
-    train_glove_model()
+    CORPUS_PICKLE = "data/f.pkl"
+    # TYPE = "vanilla"
+    TYPE = "mixed"
+
+    train_glove_model(TYPE, FILE_PATH, CORPUS_PICKLE)
