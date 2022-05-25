@@ -12,7 +12,7 @@ class Euclidean():
         pass
 
     def distance(a, b):
-        return b-a
+        return torch.abs(b-a)
 
 class ManifoldEmbedding(nn.Module):
     def __init__(self, embedding_size, vocab_size, c):
@@ -49,6 +49,9 @@ class ManifoldEmbedding(nn.Module):
         context_bias = self._context_biases(context_input)     
         d = self.manifold.dist(focal_embed, context_embed)
         d = d**2/2 #Applying h function
+        # print(d.shape)
+        # d = d/torch.norm(d)
+        # print(f"d: {d}")
         loss = -d + focal_bias + context_bias - log_coocurrence_count
         return loss**2
 
@@ -78,9 +81,10 @@ class GloVeMixedCurvature(nn.Module):
         self.hyp = ManifoldEmbedding(embedding_size, vocab_size, -0.5)
         self.sph = ManifoldEmbedding(embedding_size, vocab_size, 0.5)
 
-        self.w1 = nn.Parameter(torch.Tensor([0.33]))
-        self.w2 = nn.Parameter(torch.Tensor([0.33]))
-
+        # self.w1 = nn.Parameter(torch.Tensor([0.33]))
+        # self.w2 = nn.Parameter(torch.Tensor([0.33]))
+        
+        self.w = nn.Parameter(torch.Tensor([0.33, 0.33, 0.33]))
 
         self._glove_dataset = None
 
@@ -192,9 +196,14 @@ class GloVeMixedCurvature(nn.Module):
 
         log_coocurrence_count = torch.log(coocurrence_count)
 
-        loss = self.euc(focal_input, context_input, log_coocurrence_count)*self.w1 +\
-            self.hyp(focal_input, context_input, log_coocurrence_count)*self.w2 +\
-            self.sph(focal_input, context_input, log_coocurrence_count)*(1-self.w1-self.w2)
+        self.ws = torch.nn.functional.softmax(self.w)
+
+        #TODO MAKE WEIGHTS BETTER
+
+        loss = self.euc(focal_input, context_input, log_coocurrence_count)*self.ws[0] +\
+            self.hyp(focal_input, context_input, log_coocurrence_count)*self.ws[1] +\
+            self.sph(focal_input, context_input, log_coocurrence_count)*self.ws[2]
+
 
         single_losses = weight_factor * loss
         mean_loss = torch.mean(single_losses)

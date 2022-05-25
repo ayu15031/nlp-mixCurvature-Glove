@@ -9,7 +9,8 @@ from tools import SpacyTokenizer, Dictionary
 logging.basicConfig(
     format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
-FILE_PATH = 'training_set_tweets.txt'
+FILE_PATH = 'data/f.txt'
+# FILE_PATH = 'data/book_clean.txt'
 COMATRIX_PATH = './data/comat.pickle'
 LANG = 'en_core_web_sm'
 EMBEDDING_SIZE = 128
@@ -50,15 +51,15 @@ def preprocess(CORPUS_PICKLE=None):
 
     # preprocess read raw text
     
+    dictionary = Dictionary()
 
     if(not os.path.isfile(CORPUS_PICKLE)):
-        print("PREPROCESSING AND CREATING CO_OCCURENCE MATRIX...")
+        print("PREPROCESSING AND CREATING DATA DICT...")
         text = read_data(FILE_PATH, type='file')
         logging.info("read raw data")
 
         # init base model
         tokenizer = SpacyTokenizer(LANG)
-        dictionary = Dictionary()
         logging.info("loaded tokenizers")
 
         # build corpus
@@ -71,7 +72,7 @@ def preprocess(CORPUS_PICKLE=None):
         logging.info("tokenized documents saved!")
 
     else:
-        print(f"FOUND THE MATRIX: {CORPUS_PICKLE}")
+        print(f"FOUND THE DICT: {CORPUS_PICKLE}")
 
     # load doc
     with open(CORPUS_PICKLE, 'rb') as fp:
@@ -119,18 +120,16 @@ def train_glove_model(TYPE, CORPUS_PICKLE):
         pickle.dump(cooccurance_matrix, fp)
 
     model.train(NUM_EPOCH, device, learning_rate=LEARNING_RATE)
-    print(f"Euclidean Weight: {model.w1}")
-    print(f"Hyperbolic Weight: {model.w2}")
-    print(f"Spherical Weight: {1-model.w1-model.w2}")
+    print(f"Space Weight: {model.ws}")
+
 
     # save model for evaluation
     torch.save(model.state_dict(), MODEL_PATH)
 
 
 if __name__ == '__main__':
-    MODEL_PATH = "model/glove.pt"
-    CORPUS_PICKLE = "data/c.pkl"
-    TYPE = "vanilla"
-    # TYPE = "mixed"
+    CORPUS_PICKLE = "data/f.pkl"
+    # TYPE = "vanilla"
+    TYPE = "mixed"
 
     train_glove_model(TYPE, CORPUS_PICKLE)
