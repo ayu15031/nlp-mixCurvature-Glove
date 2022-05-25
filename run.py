@@ -38,7 +38,7 @@ def read_data(file_path, type='file'):
 
 
 
-def preprocess(CORPUS_PICKLE=None):
+def preprocess(FILE_PATH, CORPUS_PICKLE=None):
     """ Get corpus and vocab_size from raw text
 
     Args:
@@ -86,7 +86,7 @@ def preprocess(CORPUS_PICKLE=None):
     return corpus, vocab_size
 
 
-def train_glove_model(TYPE, CORPUS_PICKLE):
+def train_glove_model(TYPE, FILE_PATH, CORPUS_PICKLE):
     
     if(TYPE == "mixed"):
         MODEL_PATH = "model/gloveMixed.pt"
@@ -94,7 +94,7 @@ def train_glove_model(TYPE, CORPUS_PICKLE):
         MODEL_PATH = "model/glove.pt"
 
     # preprocess
-    corpus, vocab_size = preprocess(CORPUS_PICKLE)
+    corpus, vocab_size = preprocess(FILE_PATH, CORPUS_PICKLE)
 
     # specify device type
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -132,4 +132,4 @@ if __name__ == '__main__':
     # TYPE = "vanilla"
     TYPE = "mixed"
 
-    train_glove_model(TYPE, CORPUS_PICKLE)
+    train_glove_model(TYPE, FILE_PATH, CORPUS_PICKLE)
