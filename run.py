@@ -9,7 +9,7 @@ from tools import SpacyTokenizer, Dictionary
 logging.basicConfig(
     format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
-FILE_PATH = 'data/f.txt'
+FILE_PATH = 'data/hp.txt'
 # FILE_PATH = 'data/book_clean.txt'
 COMATRIX_PATH = './data/comat.pickle'
 LANG = 'en_core_web_sm'
