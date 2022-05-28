@@ -53,7 +53,7 @@ class ManifoldEmbedding(nn.Module):
         d = self.manifold.dist(focal_embed, context_embed)
         d = d**2/2 #Applying h function
         # print(d.shape)
-        # d = d/torch.norm(d)
+        d = d/torch.norm(d)
         # print(f"d: {d}")
         loss = -d + focal_bias + context_bias - log_coocurrence_count
 
