@@ -34,13 +34,13 @@ class ManifoldEmbedding(nn.Module):
         self._context_biases = nn.Embedding(
             vocab_size, 1).type(torch.float64)
 
-        if not c:
-            self.manifold = Euclidean()  
-        else:  
-            self.manifold = geoopt.manifolds.Stereographic(k=c, learnable=True)
+        # if not c:
+        #     self.manifold = Euclidean()  
+        # else:  
+        #     self.manifold = geoopt.manifolds.Stereographic(k=c, learnable=True)
         
         # self.manifold = geoopt.manifolds.Stereographic(k=c, learnable=(c!=0))
-        # self.manifold = geoopt.manifolds.Stereographic(k=c, learnable=False)
+        self.manifold = geoopt.manifolds.Stereographic(k=c, learnable=False)
 
 
     def forward(self, focal_input, context_input, log_coocurrence_count):
@@ -99,6 +99,8 @@ class GloVeMixedCurvature(nn.Module):
         self.hyp = ManifoldEmbedding(embedding_size, vocab_size, -0.5)
         self.sph = ManifoldEmbedding(embedding_size, vocab_size, 0.5)
 
+        print(f"C euc {self.euc.manifold.k.item()}, hyp {self.hyp.manifold.k.item()}, sph {self.sph.manifold.k.item()}")
+
         self._focal_embeddings = nn.Embedding(
             vocab_size, embedding_size).type(torch.float64)
 
@@ -116,8 +118,8 @@ class GloVeMixedCurvature(nn.Module):
 
         self._glove_dataset = None
 
-        for params in self.parameters():
-            init.uniform_(params, a=-1, b=1)
+        # for params in self.parameters():
+        #     init.uniform_(params, a=-1, b=1)
 
     def fit(self, corpus):
         """get dictionary word list and co-occruence matrix from corpus
@@ -174,9 +176,19 @@ class GloVeMixedCurvature(nn.Module):
                 "Please fit model with corpus before training")
 
         # basic training setting
+        print(f"Caaaa euc {self.euc.manifold.k.item()}, hyp {self.hyp.manifold.k.item()}, sph {self.sph.manifold.k.item()}")
+
+
         optimizer = geoopt.optim.RiemannianAdam(self.parameters(), lr=learning_rate)
         glove_dataloader = DataLoader(self._glove_dataset, batch_size)
         total_loss = 0
+
+        self.euc.manifold.k.requires_grad_(False)
+        self.sph.manifold.k.requires_grad_(False)
+        self.hyp.manifold.k.requires_grad_(False)
+
+        print(f"C euc {self.euc.manifold.k.item()}, hyp {self.hyp.manifold.k.item()}, sph {self.sph.manifold.k.item()}")
+
 
         for epoch in tqdm.tqdm(range(num_epoch)):
             count = 0
@@ -218,6 +230,10 @@ class GloVeMixedCurvature(nn.Module):
         return self._focal_embeddings(tokens) + self._context_embeddings(tokens)
 
     def _loss(self, focal_input, context_input, coocurrence_count):
+        self.euc.manifold.k.requires_grad_(False)
+        self.sph.manifold.k.requires_grad_(False)
+        self.hyp.manifold.k.requires_grad_(False)
+
         x_max, alpha = self.x_max, self.alpha
 
         # count weight factor
@@ -229,10 +245,17 @@ class GloVeMixedCurvature(nn.Module):
         self.ws = torch.nn.functional.softmax(self.w)
 
         #TODO MAKE WEIGHTS BETTER
+        le = self.euc(focal_input, context_input, log_coocurrence_count)
+        lh = self.hyp(focal_input, context_input, log_coocurrence_count)
+        ls = self.sph(focal_input, context_input, log_coocurrence_count)
 
-        loss = self.euc(focal_input, context_input, log_coocurrence_count)*self.ws[0] +\
-            self.hyp(focal_input, context_input, log_coocurrence_count)*self.ws[1] +\
-            self.sph(focal_input, context_input, log_coocurrence_count)*self.ws[2]
+        print(f"LE: {le.mean()} | LH: {lh.mean()} | LS: {ls.mean()}")
+        print(f"C euc {self.euc.manifold.k.item()}, hyp {self.hyp.manifold.k.item()}, sph {self.sph.manifold.k.item()}")
+        print(1/0)
+
+        loss = le*self.ws[0] +\
+                lh*self.ws[1] +\
+                ls*self.ws[2]
 
         # loss = self.euc(focal_input, context_input, log_coocurrence_count)
         ############################
