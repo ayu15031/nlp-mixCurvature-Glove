@@ -17,7 +17,7 @@ EMBEDDING_SIZE = 128
 CONTEXT_SIZE = 3
 NUM_EPOCH = 100
 BATHC_SIZE = 512
-LEARNING_RATE = 1e-3
+LEARNING_RATE = 2e-4
 
 
 def read_data(file_path, type='file'):

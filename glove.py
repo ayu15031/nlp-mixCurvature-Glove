@@ -12,10 +12,10 @@ def normalize(a):
 
 
 class Euclidean():
-    def __init__():
+    def __init__(self):
         pass
 
-    def distance(a, b):
+    def dist(self, a, b):
         return torch.abs(b-a)
 
 class ManifoldEmbedding(nn.Module):
@@ -34,12 +34,12 @@ class ManifoldEmbedding(nn.Module):
         self._context_biases = nn.Embedding(
             vocab_size, 1).type(torch.float64)
 
-        # if not c:
-        #     self.manifold = Euclidean()  
-        # else:  
-        #     self.manifold = geoopt.manifolds.Stereographic(k=c, learnable=True)
+        if not c:
+            self.manifold = Euclidean()  
+        else:  
+            self.manifold = geoopt.manifolds.Stereographic(k=c, learnable=True)
         
-        self.manifold = geoopt.manifolds.Stereographic(k=c, learnable=(c!=0))
+        # self.manifold = geoopt.manifolds.Stereographic(k=c, learnable=(c!=0))
         # self.manifold = geoopt.manifolds.Stereographic(k=c, learnable=False)
 
 
@@ -53,7 +53,7 @@ class ManifoldEmbedding(nn.Module):
         d = self.manifold.dist(focal_embed, context_embed)
         d = d**2/2 #Applying h function
         # print(d.shape)
-        d = d/torch.norm(d)
+        d = d/torch.norm(d) #should be normalized
         # print(f"d: {d}")
         loss = -d + focal_bias + context_bias - log_coocurrence_count
 
