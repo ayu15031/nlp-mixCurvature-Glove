@@ -17,7 +17,7 @@ EMBEDDING_SIZE = 128
 CONTEXT_SIZE = 3
 NUM_EPOCH = 100
 BATHC_SIZE = 512
-LEARNING_RATE = 0.01
+LEARNING_RATE = 1e-3
 
 
 def read_data(file_path, type='file'):
@@ -27,10 +27,10 @@ def read_data(file_path, type='file'):
         file_path (str): path for the data file
     """
     text = None
-    if type is 'file':
+    if type == 'file':
         with open(file_path, mode='r', encoding='utf-8') as fp:
             text = fp.read()
-    elif type is 'zip':
+    elif type == 'zip':
         with zipfile.ZipFile(file_path) as fp:
             text = fp.read(fp.namelist()[0]).decode()
     return text
@@ -120,7 +120,7 @@ def train_glove_model(TYPE, FILE_PATH, CORPUS_PICKLE):
         pickle.dump(cooccurance_matrix, fp)
 
     model.train(NUM_EPOCH, device, learning_rate=LEARNING_RATE)
-    print(f"Space Weight: {model.ws}")
+    # print(f"Space Weight: {model.ws}")
 
 
     # save model for evaluation
@@ -128,6 +128,12 @@ def train_glove_model(TYPE, FILE_PATH, CORPUS_PICKLE):
 
 
 if __name__ == '__main__':
+    SEED = 6969
+    # random.seed(SEED)
+    # np.random.set_seed(SEED)
+    torch.manual_seed(SEED)
+    torch.cuda.manual_seed_all(SEED)
+
     CORPUS_PICKLE = "data/f.pkl"
     # TYPE = "vanilla"
     TYPE = "mixed"

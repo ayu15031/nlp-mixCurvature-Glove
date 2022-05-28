@@ -7,6 +7,10 @@ from torch.utils.data import DataLoader, Dataset
 import tqdm
 import geoopt
 
+def normalize(a):
+   return (a.T / torch.sqrt(torch.sum(a**2, dim=1))).T
+
+
 class Euclidean():
     def __init__():
         pass
@@ -19,20 +23,16 @@ class ManifoldEmbedding(nn.Module):
         super(ManifoldEmbedding, self).__init__()
 
         self._focal_embeddings = nn.Embedding(
-            vocab_size, embedding_size, max_norm=1
-        ).type(torch.float64)
+            vocab_size, embedding_size).type(torch.float64)
 
         self._context_embeddings = nn.Embedding(
-            vocab_size, embedding_size, max_norm=1
-        ).type(torch.float64)
+            vocab_size, embedding_size).type(torch.float64)
 
         self._focal_biases = nn.Embedding(
-            vocab_size, 1, max_norm=1
-        ).type(torch.float64)
+            vocab_size, 1).type(torch.float64)
 
         self._context_biases = nn.Embedding(
-            vocab_size, 1, max_norm=1
-        ).type(torch.float64)
+            vocab_size, 1).type(torch.float64)
 
         # if not c:
         #     self.manifold = Euclidean()  
@@ -40,20 +40,38 @@ class ManifoldEmbedding(nn.Module):
         #     self.manifold = geoopt.manifolds.Stereographic(k=c, learnable=True)
         
         self.manifold = geoopt.manifolds.Stereographic(k=c, learnable=(c!=0))
+        # self.manifold = geoopt.manifolds.Stereographic(k=c, learnable=False)
 
 
     def forward(self, focal_input, context_input, log_coocurrence_count):
-        focal_embed = self._focal_embeddings(focal_input)
-        context_embed = self._context_embeddings(context_input)
+        focal_embed = normalize(self._focal_embeddings(focal_input))
+        context_embed = normalize(self._context_embeddings(context_input))
         focal_bias = self._focal_biases(focal_input)
         context_bias = self._context_biases(context_input)     
+        
+        #######################
         d = self.manifold.dist(focal_embed, context_embed)
         d = d**2/2 #Applying h function
         # print(d.shape)
         # d = d/torch.norm(d)
         # print(f"d: {d}")
         loss = -d + focal_bias + context_bias - log_coocurrence_count
+
         return loss**2
+
+        # embedding_products = torch.sum(focal_embed * context_embed, dim=1)
+        # # log_cooccurrences = torch.log(coocurrence_count)
+
+        # return (embedding_products + focal_bias +
+        #                  context_bias + log_coocurrence_count) ** 2
+
+        # # # single_losses = weight_factor * distance_expr
+        # # mean_loss = torch.mean(single_losses)
+        # # return mean_loss
+
+        #         # embedding_products = torch.sum(focal_embed * context_embed, dim=1)
+        # # log_cooccurrences = torch.log(coocurrence_count)
+
 
 
 
@@ -80,6 +98,16 @@ class GloVeMixedCurvature(nn.Module):
         self.euc = ManifoldEmbedding(embedding_size, vocab_size, 0)
         self.hyp = ManifoldEmbedding(embedding_size, vocab_size, -0.5)
         self.sph = ManifoldEmbedding(embedding_size, vocab_size, 0.5)
+
+        self._focal_embeddings = nn.Embedding(
+            vocab_size, embedding_size).type(torch.float64)
+
+        self._context_embeddings = nn.Embedding(
+            vocab_size, embedding_size).type(torch.float64)
+
+        self._focal_biases = nn.Embedding(vocab_size, 1).type(torch.float64)
+        self._context_biases = nn.Embedding(vocab_size, 1).type(torch.float64)
+
 
         # self.w1 = nn.Parameter(torch.Tensor([0.33]))
         # self.w2 = nn.Parameter(torch.Tensor([0.33]))
@@ -146,12 +174,15 @@ class GloVeMixedCurvature(nn.Module):
                 "Please fit model with corpus before training")
 
         # basic training setting
-        optimizer = optim.Adam(self.parameters(), lr=learning_rate)
+        optimizer = geoopt.optim.RiemannianAdam(self.parameters(), lr=learning_rate)
         glove_dataloader = DataLoader(self._glove_dataset, batch_size)
         total_loss = 0
 
         for epoch in tqdm.tqdm(range(num_epoch)):
+            count = 0
+            total_loss = 0
             for idx, batch in enumerate(glove_dataloader):
+                count += 1
                 optimizer.zero_grad()
 
                 i_s, j_s, counts = batch
@@ -161,14 +192,13 @@ class GloVeMixedCurvature(nn.Module):
                 loss = self._loss(i_s, j_s, counts)
 
                 total_loss += loss.item()
-                if idx % loop_interval == 0:
-                    avg_loss = total_loss / loop_interval
-                    print("epoch: {}, current step: {}, average loss: {}".format(
-                        epoch, idx, avg_loss))
-                    total_loss = 0
 
                 loss.backward()
                 optimizer.step()
+
+            print("epoch: {}, average loss: {}".format(
+                        epoch, total_loss/count))
+            
 
         print("finish glove vector training")
 
@@ -204,10 +234,49 @@ class GloVeMixedCurvature(nn.Module):
             self.hyp(focal_input, context_input, log_coocurrence_count)*self.ws[1] +\
             self.sph(focal_input, context_input, log_coocurrence_count)*self.ws[2]
 
+        # loss = self.euc(focal_input, context_input, log_coocurrence_count)
+        ############################
+        # focal_embed = normalize(self._focal_embeddings(focal_input))
+        # context_embed = normalize(self._context_embeddings(context_input))
+        # focal_bias = self._focal_biases(focal_input)
+        # context_bias = self._context_biases(context_input)
+
+        # count weight factor
+        # weight_factor = torch.pow(coocurrence_count / x_max, alpha)
+        # weight_factor[weight_factor > 1] = 1
+
+        # embedding_products = torch.sum(focal_embed * context_embed, dim=1)
+        # log_cooccurrences = torch.log(coocurrence_count)
+
+        # distance_expr = (embedding_products + focal_bias +
+        #                  context_bias + log_cooccurrences) ** 2
 
         single_losses = weight_factor * loss
+        # single_losses = weight_factor * distance_expr
+
         mean_loss = torch.mean(single_losses)
         return mean_loss
+
+        # x_max, alpha = self.x_max, self.alpha
+
+        # focal_embed = self._focal_embeddings(focal_input)
+        # context_embed = self._context_embeddings(context_input)
+        # focal_bias = self._focal_biases(focal_input)
+        # context_bias = self._context_biases(context_input)
+
+        # # count weight factor
+        # weight_factor = torch.pow(coocurrence_count / x_max, alpha)
+        # weight_factor[weight_factor > 1] = 1
+
+        # embedding_products = torch.sum(focal_embed * context_embed, dim=1)
+        # log_cooccurrences = torch.log(coocurrence_count)
+
+        # distance_expr = (embedding_products + focal_bias +
+        #                  context_bias + log_cooccurrences) ** 2
+
+        # single_losses = weight_factor * distance_expr
+        # mean_loss = torch.mean(single_losses)
+        # return mean_loss
         
 
 class GloVeModel(nn.Module):
@@ -238,6 +307,8 @@ class GloVeModel(nn.Module):
 
         self._focal_biases = nn.Embedding(vocab_size, 1).type(torch.float64)
         self._context_biases = nn.Embedding(vocab_size, 1).type(torch.float64)
+
+
         self._glove_dataset = None
 
         for params in self.parameters():
@@ -303,9 +374,11 @@ class GloVeModel(nn.Module):
         total_loss = 0
 
         for epoch in range(num_epoch):
+            count = 0
+            total_loss = 0
             for idx, batch in enumerate(glove_dataloader):
+                count += 1
                 optimizer.zero_grad()
-
                 i_s, j_s, counts = batch
                 i_s = i_s.to(device)
                 j_s = j_s.to(device)
@@ -313,14 +386,10 @@ class GloVeModel(nn.Module):
                 loss = self._loss(i_s, j_s, counts)
 
                 total_loss += loss.item()
-                if idx % loop_interval == 0:
-                    avg_loss = total_loss / loop_interval
-                    print("epoch: {}, current step: {}, average loss: {}".format(
-                        epoch, idx, avg_loss))
-                    total_loss = 0
 
                 loss.backward()
                 optimizer.step()
+            print("epoch: {}, average loss: {}".format(epoch, total_loss/count))
 
         print("finish glove vector training")
 

@@ -11,7 +11,60 @@ import torch
 def find_distance(u, v, k):
     return mobmath.dist(u, v, k=k)
 
-def find_analogy(word_a, word_b, word_c, embeddings_list, curvatures, weights):
+def load_analogy_words():
+    word_analogies = []
+    with open("data/analogies.txt", 'r') as f:
+        for line in f:
+            analogy = line.split(" ")
+            if len(analogy) == 4:
+                word_analogies.append(analogy)
+
+    return word_analogies
+
+def find_cosine_similarity(u, v):
+    distance = 0.0
+    dot = np.dot(u,v)
+    norm_u = np.sqrt(np.sum(u**2))
+    norm_v = np.sqrt(np.sum(v**2))
+    distance = dot/(norm_u)/norm_v
+    return distance
+
+def load_vectors(glove_file):
+
+    with open(glove_file, 'r', encoding="utf-8") as file:
+        words = set()
+        word_to_vec = {}
+        for line in file:
+            line = line.strip().split()
+            curr_word = line[0]
+            words.add(curr_word)
+            word_to_vec[curr_word] = np.array(line[1:], dtype=np.float64)
+    return words, word_to_vec
+
+def find_analogy_glove(word_a, word_b, word_c, embeddings):
+    word_a = word_a.lower()
+    word_b = word_b.lower()
+    word_c = word_c.lower()
+    
+    e_a, e_b, e_c = embeddings[word_a], embeddings[word_b], embeddings[word_c]
+    
+    words = embeddings.keys()
+    max_cosine_sim = -999
+    best_word = None
+    
+    for w in words:
+        if w in [word_a, word_b, word_c]:
+            continue
+        cosine_sim = find_cosine_similarity(e_b - e_a, embeddings[w] - e_c)
+        
+        if cosine_sim > max_cosine_sim:
+            max_cosine_sim = cosine_sim
+            best_word = w
+            
+    return best_word
+
+
+def find_analogy_mix(word_a, word_b, word_c, embeddings_list, curvatures, weights):
     word_a = word_a.lower()
     word_b = word_b.lower()
     word_c = word_c.lower()
@@ -56,6 +109,18 @@ def find_analogy(word_a, word_b, word_c, embeddings_list, curvatures, weights):
     final = word_dist[:10]
     return final
 
+def find_analogy(path ,type="glove"):
+    # _, embeddings = load_vectors(path)
+    # words_list = load_analogy_words()
+    
+
+    # for words in words_list:
+    #     if type == "glove":
+    #         res = find_analogy_glove(words[0], words[1], words[2])
+    #     else:
+    #         res = find_analogy_mix(words[0], words[1], words[2])
+        
+    pass
 
 if __name__ == "__main__":
     # find_cosine_similarity(1, 1)
