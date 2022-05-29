@@ -101,6 +101,8 @@ class GloVeMixedCurvature(nn.Module):
         self.x_max = x_max
 
 
+        print(f"C euc {self.euc.manifold.k.item()}, hyp {self.hyp.manifold.k.item()}, sph {self.sph.manifold.k.item()}")
+
         self._focal_embeddings = nn.Embedding(
             vocab_size, embedding_size).type(torch.float64)
 
@@ -183,6 +185,9 @@ class GloVeMixedCurvature(nn.Module):
                 "Please fit model with corpus before training")
 
         # basic training setting
+        print(f"Caaaa euc {self.euc.manifold.k.item()}, hyp {self.hyp.manifold.k.item()}, sph {self.sph.manifold.k.item()}")
+
+
         optimizer = geoopt.optim.RiemannianAdam(self.parameters(), lr=learning_rate)
         glove_dataloader = DataLoader(self._glove_dataset, batch_size)
         total_loss = 0
@@ -235,6 +240,10 @@ class GloVeMixedCurvature(nn.Module):
         return self._focal_embeddings(tokens) + self._context_embeddings(tokens)
 
     def _loss(self, focal_input, context_input, coocurrence_count):
+        self.euc.manifold.k.requires_grad_(False)
+        self.sph.manifold.k.requires_grad_(False)
+        self.hyp.manifold.k.requires_grad_(False)
+
         x_max, alpha = self.x_max, self.alpha
 
         # count weight factor

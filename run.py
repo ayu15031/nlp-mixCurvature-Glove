@@ -9,8 +9,8 @@ from tools import SpacyTokenizer, Dictionary
 logging.basicConfig(
     format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
-FILE_PATH = 'data/hp.txt'
-# FILE_PATH = 'data/book_clean.txt'
+# FILE_PATH = 'data/hp.txt'
+FILE_PATH = 'data/book_clean.txt'
 COMATRIX_PATH = './data/comat.pickle'
 LANG = 'en_core_web_sm'
 EMBEDDING_SIZE = 128
@@ -109,7 +109,9 @@ def train_glove_model(TYPE, FILE_PATH, CORPUS_PICKLE):
     else:
         print(f"wtf is {TYPE}")
     
+    print(f"Cxxx euc {model.euc.manifold.k.item()}, hyp {model.hyp.manifold.k.item()}, sph {model.sph.manifold.k.item()}")
     model.to(device)
+
 
     # fit corpus to count cooccurance matrix
     model.fit(corpus)
