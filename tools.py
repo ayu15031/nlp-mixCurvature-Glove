@@ -16,7 +16,7 @@ class SpacyTokenizer:
 
     def tokenize(self, text: str) -> list:
         # we don't need new line as token
-        lines = text.splitlines()
+        lines = text.split('.')
 
         doc = [[token.text for token
                 in self._nlp.tokenizer(text.strip())] for text in lines]
@@ -51,9 +51,16 @@ class Dictionary:
         vocab_size, word2idx = self.vocab_size, self.word2idx
 
         # count word occurrance and vocab size
-        tokens = set()
+        tokens = dict()
+        # tokens = set()
         for line in doc:
-            tokens.update(line)
+            # tokens.update(line)
+            # tokens.append(line)
+            # print("line:", type(line))
+            for t in line:
+                tokens[t] = 1
+            # tokens[line] = 1
+        # tokens = list(dict.fromkeys(tokens))
 
         for token in tokens:
             if token not in word2idx:

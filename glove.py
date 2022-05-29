@@ -19,8 +19,8 @@ wandb.init(project="nlp-multimixture", entity="ayushi15")
 
 wandb.config = {
   "learning_rate": 2e-4,
-  "epochs": 300,
-  "batch_size": 512
+  "epochs": 150,
+  "batch_size": 128
 }
 
 def normalize(a):
@@ -84,7 +84,7 @@ class GloVeMixedCurvature(nn.Module):
     """Implement GloVe model in Mixed-Curvature space with Pytorch
     """
 
-    def __init__(self, embedding_size, context_size, vocab_size, min_occurrance=1, x_max=100, alpha=3 / 4):
+    def __init__(self, embedding_size, context_size, vocab_size, min_occurrance=1, x_max=100, alpha=3 / 4, expt_name="default", resume=False):
         super(GloVeMixedCurvature, self).__init__()
 
         self.embedding_size = embedding_size
@@ -123,6 +123,10 @@ class GloVeMixedCurvature(nn.Module):
         self.euc = ManifoldEmbedding(embedding_size, vocab_size, 0)
         self.hyp = ManifoldEmbedding(embedding_size, vocab_size, -0.5)
         self.sph = ManifoldEmbedding(embedding_size, vocab_size, 0.5)
+        self.expt_name = expt_name
+
+        if resume:
+            self.load_checkpoints(expt_name)
 
 
     def fit(self, corpus):
@@ -183,6 +187,7 @@ class GloVeMixedCurvature(nn.Module):
         optimizer = geoopt.optim.RiemannianAdam(self.parameters(), lr=learning_rate)
         glove_dataloader = DataLoader(self._glove_dataset, batch_size)
         total_loss = 0
+        best_loss = 10000000
 
         # Optional
         wandb.watch(self)
@@ -209,6 +214,11 @@ class GloVeMixedCurvature(nn.Module):
 
             print("epoch: {}, average loss: {}".format(
                         epoch, total_loss/count))
+
+            if total_loss/count < best_loss:
+                best_loss = total_loss/count
+                print("Saving checkpoints.....")
+                self.save_checkpoints(self.expt_name)
 
             # wandb.log({"loss": total_loss/count, "Euc Weight": self.ws[0], "Hyp Weight": self.ws[1], "Sph Weight": self.ws[2]})
 
@@ -256,6 +266,20 @@ class GloVeMixedCurvature(nn.Module):
         mean_loss = torch.mean(single_losses)
         return mean_loss
 
+    def save_checkpoints(self, expt_name):
+        raw_model = self.module if hasattr(self, "module") else self
+        save_path = "checkpoints/" + expt_name
+        # if suffix is not None:
+        #     save_path += "_{}".format(suffix)
+        torch.save(raw_model.state_dict(), save_path)
+
+    def load_checkpoints(self, expt_name):
+        save_path = "checkpoints/" + expt_name
+        self.load_state_dict(torch.load(save_path))
+
+
+
+
 
         
 
@@ -263,7 +287,7 @@ class GloVeModel(nn.Module):
     """Implement GloVe model with Pytorch
     """
 
-    def __init__(self, embedding_size, context_size, vocab_size, min_occurrance=1, x_max=100, alpha=3 / 4):
+    def __init__(self, embedding_size, context_size, vocab_size, min_occurrance=1, x_max=100, alpha=3 / 4, expt_name="default", resume=False):
         super(GloVeModel, self).__init__()
 
         self.embedding_size = embedding_size
@@ -293,6 +317,10 @@ class GloVeModel(nn.Module):
 
         for params in self.parameters():
             init.uniform_(params, a=-1, b=1)
+
+        self.expt_name = expt_name
+        if resume:
+            self.load_checkpoints(expt_name)
 
     def fit(self, corpus):
         """get dictionary word list and co-occruence matrix from corpus
@@ -352,6 +380,7 @@ class GloVeModel(nn.Module):
         optimizer = optim.Adam(self.parameters(), lr=learning_rate)
         glove_dataloader = DataLoader(self._glove_dataset, batch_size)
         total_loss = 0
+        best_loss = 100000
 
         for epoch in range(num_epoch):
             count = 0
@@ -370,6 +399,10 @@ class GloVeModel(nn.Module):
                 loss.backward()
                 optimizer.step()
             print("epoch: {}, average loss: {}".format(epoch, total_loss/count))
+            if total_loss/count < best_loss:
+                print("Saving best model.......")
+                best_loss = total_loss/count
+                self.save_checkpoints(self.expt_name)
         
             wandb.log({"loss": total_loss/count})
 
@@ -411,6 +444,17 @@ class GloVeModel(nn.Module):
         single_losses = weight_factor * distance_expr
         mean_loss = torch.mean(single_losses)
         return mean_loss
+
+    def save_checkpoints(self, expt_name):
+        raw_model = self.module if hasattr(self, "module") else self
+        save_path = "checkpoints/" + expt_name
+        # if suffix is not None:
+        #     save_path += "_{}".format(suffix)
+        torch.save(raw_model.state_dict(), save_path)
+
+    def load_checkpoints(self, expt_name):
+        save_path = "checkpoints/" + expt_name
+        self.load_state_dict(torch.load(save_path))
 
 
 class GloVeDataSet(Dataset):

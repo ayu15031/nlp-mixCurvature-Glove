@@ -6,17 +6,24 @@ import torch
 from glove import GloVeModel, GloVeMixedCurvature
 from tools import SpacyTokenizer, Dictionary
 
+# import debugpy
+# debugpy.listen(5951)
+# print("Waiting for debugger")
+# debugpy.wait_for_client()
+# print("Attached! :)")
+
+
 logging.basicConfig(
     format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
-# FILE_PATH = 'data/hp.txt'
-FILE_PATH = 'data/book_clean.txt'
+FILE_PATH = 'data/hp.txt'
+# FILE_PATH = 'data/book_clean.txt'
 COMATRIX_PATH = './data/comat.pickle'
 LANG = 'en_core_web_sm'
 EMBEDDING_SIZE = 128
 CONTEXT_SIZE = 3
-NUM_EPOCH = 300
-BATHC_SIZE = 512
+NUM_EPOCH = 150
+BATHC_SIZE = 128
 LEARNING_RATE = 2e-4
 
 
@@ -53,7 +60,8 @@ def preprocess(FILE_PATH, CORPUS_PICKLE=None):
     
     dictionary = Dictionary()
 
-    if(not os.path.isfile(CORPUS_PICKLE)):
+    # if(not os.path.isfile(CORPUS_PICKLE)):
+    if(True):
         print("PREPROCESSING AND CREATING DATA DICT...")
         text = read_data(FILE_PATH, type='file')
         logging.info("read raw data")
@@ -75,18 +83,24 @@ def preprocess(FILE_PATH, CORPUS_PICKLE=None):
         print(f"FOUND THE DICT: {CORPUS_PICKLE}")
 
     # load doc
-    with open(CORPUS_PICKLE, 'rb') as fp:
-        doc = pickle.load(fp)
+    # with open(CORPUS_PICKLE, 'rb') as fp:
+    #     doc = pickle.load(fp)
+
+    print(len(doc), list(doc)[1][0:10])
 
     dictionary.update(doc)
     logging.info("after generate dictionary")
+    with open(DICT_PICKLE, mode='wb') as fp:
+        pickle.dump(dictionary, fp)
+
+    print("="*20, dictionary.word2idx["hogwarts"])
     corpus = dictionary.corpus(doc)
     vocab_size = dictionary.vocab_size
 
     return corpus, vocab_size
 
 
-def train_glove_model(TYPE, FILE_PATH, CORPUS_PICKLE):
+def train_glove_model(TYPE, FILE_PATH, CORPUS_PICKLE, resume=False, expt_name="default"):
     
     if(TYPE == "mixed"):
         MODEL_PATH = "model/gloveMixed.pt"
@@ -103,15 +117,13 @@ def train_glove_model(TYPE, FILE_PATH, CORPUS_PICKLE):
     logging.info("init model hyperparameter")
 
     if TYPE=="vanilla":
-        model = GloVeModel(EMBEDDING_SIZE, CONTEXT_SIZE, vocab_size)
+        model = GloVeModel(EMBEDDING_SIZE, CONTEXT_SIZE, vocab_size, resume=resume, expt_name=expt_name)
     elif TYPE=="mixed":
-        model = GloVeMixedCurvature(EMBEDDING_SIZE, CONTEXT_SIZE, vocab_size)
+        model = GloVeMixedCurvature(EMBEDDING_SIZE, CONTEXT_SIZE, vocab_size, resume=resume, expt_name=expt_name)
     else:
         print(f"wtf is {TYPE}")
     
-    print(f"Cxxx euc {model.euc.manifold.k.item()}, hyp {model.hyp.manifold.k.item()}, sph {model.sph.manifold.k.item()}")
     model.to(device)
-
 
     # fit corpus to count cooccurance matrix
     model.fit(corpus)
@@ -128,6 +140,7 @@ def train_glove_model(TYPE, FILE_PATH, CORPUS_PICKLE):
     # save model for evaluation
     torch.save(model.state_dict(), MODEL_PATH)
 
+import argparse
 
 if __name__ == '__main__':
     SEED = 6969
@@ -136,8 +149,18 @@ if __name__ == '__main__':
     torch.manual_seed(SEED)
     torch.cuda.manual_seed_all(SEED)
 
-    CORPUS_PICKLE = "data/f.pkl"
-    TYPE = "vanilla"
-    # TYPE = "mixed"
+    parser = argparse.ArgumentParser()
 
-    train_glove_model(TYPE, FILE_PATH, CORPUS_PICKLE)
+    parser.add_argument("--type", type=str, default="vanilla")
+    parser.add_argument("--resume", action="store_true")
+    args = parser.parse_args()
+    
+    TYPE = args.type
+
+    CORPUS_PICKLE = "data/f_test_" + TYPE + ".pkl"
+
+    # TYPE = "vanilla"
+    # TYPE = "mixed"
+    DICT_PICKLE = "data/dict_test_" + TYPE + ".pkl"
+
+    train_glove_model(TYPE, FILE_PATH, CORPUS_PICKLE, args.resume, expt_name=TYPE)
