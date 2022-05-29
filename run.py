@@ -15,7 +15,7 @@ COMATRIX_PATH = './data/comat.pickle'
 LANG = 'en_core_web_sm'
 EMBEDDING_SIZE = 128
 CONTEXT_SIZE = 3
-NUM_EPOCH = 100
+NUM_EPOCH = 300
 BATHC_SIZE = 512
 LEARNING_RATE = 2e-4
 
@@ -135,7 +135,7 @@ if __name__ == '__main__':
     torch.cuda.manual_seed_all(SEED)
 
     CORPUS_PICKLE = "data/f.pkl"
-    # TYPE = "vanilla"
-    TYPE = "mixed"
+    TYPE = "vanilla"
+    # TYPE = "mixed"
 
     train_glove_model(TYPE, FILE_PATH, CORPUS_PICKLE)

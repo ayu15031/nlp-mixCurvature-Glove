@@ -30,16 +30,17 @@ def find_cosine_similarity(u, v):
     return distance
 
 def load_vectors(glove_file):
+    
 
-    with open(glove_file, 'r', encoding="utf-8") as file:
-        words = set()
-        word_to_vec = {}
-        for line in file:
-            line = line.strip().split()
-            curr_word = line[0]
-            words.add(curr_word)
-            word_to_vec[curr_word] = np.array(line[1:], dtype=np.float64)
-    return words, word_to_vec
+    # with open(glove_file, 'r', encoding="utf-8") as file:
+    #     words = set()
+    #     word_to_vec = {}
+    #     for line in file:
+    #         line = line.strip().split()
+    #         curr_word = line[0]
+    #         words.add(curr_word)
+    #         word_to_vec[curr_word] = np.array(line[1:], dtype=np.float64)
+    # return words, word_to_vec
 
 def find_analogy_glove(word_a, word_b, word_c, embeddings):
     word_a = word_a.lower()
