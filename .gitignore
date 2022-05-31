@@ -3,4 +3,5 @@ data/*
 __pycache__/*
 model/*
 wandb/*
+checkpoints/*
 .ipynb_checkpoints/*

@@ -5,6 +5,7 @@ import pickle
 import torch
 from glove import GloVeModel, GloVeMixedCurvature
 from tools import SpacyTokenizer, Dictionary
+import numpy as np
 
 # import debugpy
 # debugpy.listen(5951)
@@ -21,8 +22,8 @@ FILE_PATH = 'data/hp.txt'
 COMATRIX_PATH = './data/comat.pickle'
 LANG = 'en_core_web_sm'
 EMBEDDING_SIZE = 128
-CONTEXT_SIZE = 3
-NUM_EPOCH = 150
+CONTEXT_SIZE = 3 #TODO CHANGE
+NUM_EPOCH = 1
 BATHC_SIZE = 128
 LEARNING_RATE = 2e-4
 
@@ -100,7 +101,7 @@ def preprocess(FILE_PATH, CORPUS_PICKLE=None):
     return corpus, vocab_size
 
 
-def train_glove_model(TYPE, FILE_PATH, CORPUS_PICKLE, resume=False, expt_name="default"):
+def train_glove_model(TYPE, FILE_PATH, CORPUS_PICKLE, CONFIG_FILE, resume=False, expt_name="default"):
     
     if(TYPE == "mixed"):
         MODEL_PATH = "model/gloveMixed.pt"
@@ -115,6 +116,17 @@ def train_glove_model(TYPE, FILE_PATH, CORPUS_PICKLE, resume=False, expt_name="d
 
     # init vector model
     logging.info("init model hyperparameter")
+    logging.info("Saving config file...")
+
+    config = {
+        "EMBEDDING_SIZE": EMBEDDING_SIZE,
+        "CONTEXT_SIZE": CONTEXT_SIZE,
+        "VS": vocab_size 
+    }
+
+    with open(CONFIG_FILE, "wb") as fp:
+        pickle.dump(config, fp)
+
 
     if TYPE=="vanilla":
         model = GloVeModel(EMBEDDING_SIZE, CONTEXT_SIZE, vocab_size, resume=resume, expt_name=expt_name)
@@ -163,4 +175,11 @@ if __name__ == '__main__':
     # TYPE = "mixed"
     DICT_PICKLE = "data/dict_test_" + TYPE + ".pkl"
 
-    train_glove_model(TYPE, FILE_PATH, CORPUS_PICKLE, args.resume, expt_name=TYPE)
+    CONFIG_FILE = "config_" + TYPE + ".pkl"
+
+    model = train_glove_model(TYPE, FILE_PATH, CORPUS_PICKLE, CONFIG_FILE, args.resume, expt_name=TYPE)
+    
+    ###testing 
+    # test_glove_model(model, DICT_PICKLE)
+
+
